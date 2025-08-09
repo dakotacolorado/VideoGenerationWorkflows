@@ -10,7 +10,7 @@ PROJECT_ID = "personal-358900"
 LOCATION = "us-central1"
 MODEL_NAME = "veo-3.0-generate-001"  # or "veo-3.0-fast-generate-001"
 DURATION_SECONDS = 8
-OUTPUT_DIR = pathlib.Path("demos/veo/videos")
+OUTPUT_DIR = pathlib.Path("demos/generate_video_from_prompt/videos")
 STORAGE_URI = None  # e.g., "gs://your-bucket/veo-output/"
 RESOLUTION = "1080p"  # or "720p"
 # -----------------------

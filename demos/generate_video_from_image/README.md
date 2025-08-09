@@ -1,0 +1,2 @@
+Windows Command to Run Demo:
+`python .\demos\generate_video_from_image\generate_video.py --image-prompt "foggy lake at dawn, subtle ripples" --video-prompt "bring this image to life but ensure the frame and camera position stay constant" --count 3`
