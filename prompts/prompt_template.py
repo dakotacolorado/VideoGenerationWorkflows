@@ -22,9 +22,9 @@ class PromptTemplate(ABC):
     
     @property
     @abstractmethod
-    def anime_scene_prompt(self) -> str:
+    def animate_scene_prompt(self) -> str:
         """
-        Get the anime scene prompt for the template.
+        Animate the scene prompt for the template.
         """
         return "Generate a live frame based on provided photo."
 
