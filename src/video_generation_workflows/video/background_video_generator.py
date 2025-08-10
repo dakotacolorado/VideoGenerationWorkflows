@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pathlib
 import time
-from dataclasses import dataclass
 from typing import Final, Union
 
 from google import genai
@@ -10,6 +9,8 @@ from google.genai import types
 
 from .video_configuration import VideoConfiguration
 from .video_generator import VideoGenerator
+from .video_segment_manager import VideoSegmentManager
+from moviepy import VideoFileClip
 
 
 class BackgroundVideoGenerator(VideoGenerator):
@@ -83,12 +84,14 @@ class BackgroundVideoGenerator(VideoGenerator):
 
         operation = self._wait_for_operation(client, operation)
 
-        # 3) Save the single generated video and return its path
+        # 3) Save the single generated video segment and return final combined path
         videos = getattr(operation, "response", getattr(operation, "result")).generated_videos
         if not videos:
             raise RuntimeError("Veo returned no videos.")
 
-        output_path = self.output_dir / "video_1.mp4"
-        videos[0].video.save(output_path)
-        return str(output_path)
+        # Use the segment manager to own concatenation and final save; pass API video directly
+        manager = VideoSegmentManager(video_name=config.video_name, output_dir=self.output_dir)
+        manager.add_segment(videos[0].video)
+        final_path = manager.save()
+        return final_path
 
