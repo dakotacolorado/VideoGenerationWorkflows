@@ -20,6 +20,7 @@ OUTPUT_DIR = os.getenv(
 
 
 config = VideoConfiguration(
+    video_name=VIDEO_NAME,
     length=3,
     base_scene_prompt=(
         "A serene forest lake with a clear blue sky and gentle ripples on the water."

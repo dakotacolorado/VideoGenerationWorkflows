@@ -26,6 +26,8 @@ class VideoConfiguration:
 
     Attributes
     ----------
+    video_name : str
+        Human-friendly name for the video. Not used by generators yet.
     length : int
         Total number of segments in the video (e.g., number of 8-second clips).
     base_scene_prompt : str
@@ -41,6 +43,7 @@ class VideoConfiguration:
     ValueError
         If an action prompt's start index is out of bounds or duplicated.
     """
+    video_name: str
     length: int
     base_scene_prompt: str
     animate_scene_prompt: str = "Generate a live frame based on provided photo."
