@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pathlib
 import time
-from typing import Final
+from dataclasses import dataclass
+from typing import Final, Union
 
 from google import genai
 from google.genai import types
@@ -19,21 +20,22 @@ class BackgroundVideoGenerator(VideoGenerator):
     - Save outputs to disk and return the video file path
     """
 
-    # Copied from demo for rev one; will be made configurable later
-    PROJECT_ID: Final[str] = "personal-358900"
-    LOCATION: Final[str] = "us-central1"
     IMAGEN_MODEL: Final[str] = "imagen-3.0-generate-002"
     VEO_MODEL: Final[str] = "veo-2.0-generate-001"
-    OUTPUT_DIR: Final[pathlib.Path] = pathlib.Path(
-        "demos/generate_video_from_start_end_images/videos"
-    )
-
-    DURATION_SECONDS: Final[int] = 8
     ASPECT_RATIO: Final[str] = "16:9"
+
+    def __init__(
+        self,
+        project_id: str,
+        location: str,
+        output_dir: Union[str, pathlib.Path],
+    ) -> None:
+        self.project_id = project_id
+        self.location = location
+        self.output_dir = pathlib.Path(output_dir)
 
     def _wait_for_operation(self, client: genai.Client, operation):
         while not operation.done:
-            # Minimal logging for now; can be replaced with structured logging later
             print("Waiting for generation...")
             time.sleep(10)
             operation = client.operations.get(operation)
@@ -41,12 +43,12 @@ class BackgroundVideoGenerator(VideoGenerator):
 
     def generate(self, config: VideoConfiguration) -> str:
         # Ensure output directory exists
-        self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         client = genai.Client(
             vertexai=True,
-            project=self.PROJECT_ID,
-            location=self.LOCATION,
+            project=self.project_id,
+            location=self.location,
             http_options=types.HttpOptions(api_version="v1"),
         )
 
@@ -62,7 +64,7 @@ class BackgroundVideoGenerator(VideoGenerator):
             raise RuntimeError("Imagen returned no images.")
 
         base_image = image_response.generated_images[0].image
-        image_path = self.OUTPUT_DIR / "image_1.jpg"
+        image_path = self.output_dir / "image_1.jpg"
         base_image.save(image_path)
 
         # 2) Generate a single video using the base image as first & last frame
@@ -72,7 +74,8 @@ class BackgroundVideoGenerator(VideoGenerator):
             image=base_image,
             config=types.GenerateVideosConfig(
                 number_of_videos=1,
-                duration_seconds=self.DURATION_SECONDS,
+                # Respect API limit; not user-configurable here
+                duration_seconds=8, # Not user-configurable here.  This is the only duration that is supported by the VEO model.
                 aspect_ratio=self.ASPECT_RATIO,
                 last_frame=base_image,
             ),
@@ -85,7 +88,7 @@ class BackgroundVideoGenerator(VideoGenerator):
         if not videos:
             raise RuntimeError("Veo returned no videos.")
 
-        output_path = self.OUTPUT_DIR / "video_1.mp4"
+        output_path = self.output_dir / "video_1.mp4"
         videos[0].video.save(output_path)
         return str(output_path)
 
