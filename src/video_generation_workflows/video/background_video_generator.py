@@ -23,14 +23,28 @@ class BackgroundVideoGenerator(VideoGenerator):
     - For each segment index in the configured length:
       - Build a prompt that keeps the base loop and optionally applies any
         action(s) whose `start_index` matches the segment index
-      - Generate a video using the base image as both first and last frame (Veo)
+      - Generate a video constrained to a seamless, static loop (Veo)
       - Append the resulting segment to the manager
     - Concatenate and save the final video, return the written path
     """
 
     IMAGEN_MODEL: Final[str] = "imagen-3.0-generate-002"
-    VEO_MODEL: Final[str] = "veo-2.0-generate-001"
+    VEO_MODEL: Final[str] = "veo-3.0-generate-preview"
     ASPECT_RATIO: Final[str] = "16:9"
+
+    # Strong, reusable constraints to create static, loopable clips without an explicit end frame
+    STATIC_LOOP_PREAMBLE: Final[str] = (
+        "Create an 8-second seamless looping video from the provided reference image.\n"
+        "- Lock the camera and composition: absolutely no panning, tilting, dolly, zoom, rotation, or reframing.\n"
+        "- Keep the background, horizon, perspective, and parallax completely fixed.\n"
+        "- Do not change lighting, weather, white balance, exposure, focus, lens, or depth of field.\n"
+        "- Do not add, remove, or reposition background objects.\n"
+        "- Treat the input image as a frozen plate: do not translate, scale, rotate, crop, stabilize, or reframe any pixels across frames.\n"
+        "- All static regions must remain pixel-aligned and identical in every frame (no drift or breathing).\n"
+        "- Only permit extremely subtle, localized, cyclical in-place micro-motions that return to their initial state by the end.\n"
+        "- If any global drift would occur, reduce motion to zero to preserve a perfect loop.\n"
+        "- Ensure the LAST frame is pixel-identical to the FIRST frame for a perfect start-to-end loop."
+    )
 
     def __init__(
         self,
@@ -83,28 +97,57 @@ class BackgroundVideoGenerator(VideoGenerator):
         for ap in config.action_prompts:
             index_to_actions.setdefault(ap.start_index, []).append(ap.prompt)
 
-        for segment_index in range(config.length):
-            # Build the per-segment prompt
-            base_loop_instructions = (
-                f"{config.base_scene_prompt}\n"
-                f"Maintain a seamless, subtle 8-second looping background shot."
+        # If any segments have no actions, pre-generate a single base segment to reuse
+        animate_instructions_global = (config.animate_scene_prompt or "").strip()
+        base_segment_path = self.output_dir / "segment_base.mp4"
+        if any(i not in index_to_actions for i in range(config.length)):
+            base_segment_prompt = (
+                f"{self.STATIC_LOOP_PREAMBLE}\n\n"
+                f"Scene description: {config.base_scene_prompt.strip()}\n"
+                f"Animation guidance: {animate_instructions_global}\n"
+                f"Segment 1 of {config.length}."
             )
-            animate_instructions = config.animate_scene_prompt or ""
+
+            base_operation = client.models.generate_videos(
+                model=self.VEO_MODEL,
+                prompt=base_segment_prompt,
+                image=base_image,
+                config=types.GenerateVideosConfig(
+                    number_of_videos=1,
+                    duration_seconds=8,
+                    aspect_ratio=self.ASPECT_RATIO,
+                ),
+            )
+            base_operation = self._wait_for_operation(client, base_operation)
+            base_videos = getattr(base_operation, "response", getattr(base_operation, "result")).generated_videos
+            if not base_videos:
+                raise RuntimeError("Veo returned no videos for base segment.")
+            base_videos[0].video.save(base_segment_path)
+
+        for segment_index in range(config.length):
+            # Build the per-segment prompt: preamble -> scene -> animation guidance -> segment index -> actions
+            animate_instructions = (config.animate_scene_prompt or "").strip()
 
             actions_for_segment = index_to_actions.get(segment_index, [])
-            if actions_for_segment:
-                actions_text = " ".join(
-                    [f"Action: {action_text}." for action_text in actions_for_segment]
-                )
-                segment_prompt = (
-                    f"{base_loop_instructions}\n{animate_instructions}\n"
-                    f"This is segment {segment_index + 1} of {config.length}. {actions_text}"
-                )
-            else:
-                segment_prompt = (
-                    f"{base_loop_instructions}\n{animate_instructions}\n"
-                    f"This is segment {segment_index + 1} of {config.length}."
-                )
+
+            # Reuse the pre-generated base segment if there are no actions for this segment
+            if not actions_for_segment and base_segment_path.exists():
+                manager.add_segment(VideoFileClip(str(base_segment_path)))
+                continue
+            actions_text = "".join(
+                [
+                    f"\n- Apply this subtle, localized action without moving the camera or background: {action_text}."
+                    for action_text in actions_for_segment
+                ]
+            )
+
+            segment_prompt = (
+                f"{self.STATIC_LOOP_PREAMBLE}\n\n"
+                f"Scene description: {config.base_scene_prompt.strip()}\n"
+                f"Animation guidance: {animate_instructions}\n"
+                f"Segment {segment_index + 1} of {config.length}."
+                f"{actions_text}"
+            )
 
             operation = client.models.generate_videos(
                 model=self.VEO_MODEL,
@@ -115,7 +158,7 @@ class BackgroundVideoGenerator(VideoGenerator):
                     # Respect API limit; not user-configurable here
                     duration_seconds=8,  # VEO model supports this duration
                     aspect_ratio=self.ASPECT_RATIO,
-                    last_frame=base_image,
+                    # last_frame=base_image,
                 ),
             )
 

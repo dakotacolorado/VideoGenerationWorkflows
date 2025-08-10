@@ -21,21 +21,24 @@ OUTPUT_DIR = os.getenv(
 
 config = VideoConfiguration(
     video_name=VIDEO_NAME,
-    length=5,
+    length=4,
     base_scene_prompt=(
-        "A serene forest lake with a clear blue sky and gentle ripples on the water."
+        "An otherworldly alien landscape under a star-filled sky: colossal jagged mountains rise from glowing misty valleys,"
+        " with bioluminescent flora scattered across the terrain and distant nebulae visible beyond. Cinematic, high detail, ethereal atmosphere."
     ),
-    animate_scene_prompt="Generate a slowly changing scene based on provided photo.  Keep the camera position and framing constant.",
+    animate_scene_prompt=(
+        "Create a seamless short loop from the provided image. The camera and composition must be absolutely locked — no panning, tilting, zooming, reframing, stabilization, or parallax. Treat the image as a frozen plate: do not translate, scale, rotate, crop, or re-project any pixels. Keep background, lighting, perspective, and framing identical across all frames. Only allow very subtle, localized, cyclical in-place motion that returns exactly to the starting state. If any global drift would occur, reduce motion to zero. Ensure the last frame is pixel-identical to the first."
+    ),
     action_prompts=[
         ActionPrompt(
-            prompt="A small boat drifts on the lake, a single rowboat.", start_index=1
+            prompt="A faint meteor slowly streaks across the sky and fades.", start_index=1
         ),
-        ActionPrompt(
-            prompt="A small boat drifts on the lake, a single rowboat.", start_index=2
-        ),
-        ActionPrompt(
-            prompt="A small boat drifts on the lake, a single rowboat.", start_index=4
-        ),
+        # ActionPrompt(
+        #     prompt="A small boat drifts on the lake, a single rowboat.", start_index=2
+        # ),
+        # ActionPrompt(
+        #     prompt="A small boat drifts on the lake, a single rowboat.", start_index=4
+        # ),
     ],
 )
 
