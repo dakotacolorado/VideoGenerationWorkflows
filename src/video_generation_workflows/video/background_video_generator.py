@@ -15,10 +15,17 @@ from moviepy import VideoFileClip
 
 class BackgroundVideoGenerator(VideoGenerator):
     """
-    Simple background video generator that mirrors the demo script logic:
-    - Generate a base image from the scene prompt (Imagen)
-    - Generate a single video using that image as both first and last frame (Veo)
-    - Save outputs to disk and return the video file path
+    Background video generator that produces a set of loopable segments and
+    appends them to a `VideoSegmentManager`.
+
+    Flow:
+    - Generate a base image from the base scene prompt (Imagen)
+    - For each segment index in the configured length:
+      - Build a prompt that keeps the base loop and optionally applies any
+        action(s) whose `start_index` matches the segment index
+      - Generate a video using the base image as both first and last frame (Veo)
+      - Append the resulting segment to the manager
+    - Concatenate and save the final video, return the written path
     """
 
     IMAGEN_MODEL: Final[str] = "imagen-3.0-generate-002"
@@ -68,30 +75,60 @@ class BackgroundVideoGenerator(VideoGenerator):
         image_path = self.output_dir / "image_1.jpg"
         base_image.save(image_path)
 
-        # 2) Generate a single video using the base image as first & last frame
-        operation = client.models.generate_videos(
-            model=self.VEO_MODEL,
-            prompt=config.animate_scene_prompt,
-            image=base_image,
-            config=types.GenerateVideosConfig(
-                number_of_videos=1,
-                # Respect API limit; not user-configurable here
-                duration_seconds=8, # Not user-configurable here.  This is the only duration that is supported by the VEO model.
-                aspect_ratio=self.ASPECT_RATIO,
-                last_frame=base_image,
-            ),
-        )
-
-        operation = self._wait_for_operation(client, operation)
-
-        # 3) Save the single generated video segment and return final combined path
-        videos = getattr(operation, "response", getattr(operation, "result")).generated_videos
-        if not videos:
-            raise RuntimeError("Veo returned no videos.")
-
-        # Use the segment manager to own concatenation and final save; pass API video directly
+        # 2) Generate N segments, allowing actions to add unique features per segment
         manager = VideoSegmentManager(video_name=config.video_name, output_dir=self.output_dir)
-        manager.add_segment(videos[0].video)
+
+        # Pre-index actions by their start index for quick lookup
+        index_to_actions = {}
+        for ap in config.action_prompts:
+            index_to_actions.setdefault(ap.start_index, []).append(ap.prompt)
+
+        for segment_index in range(config.length):
+            # Build the per-segment prompt
+            base_loop_instructions = (
+                f"{config.base_scene_prompt}\n"
+                f"Maintain a seamless, subtle 8-second looping background shot."
+            )
+            animate_instructions = config.animate_scene_prompt or ""
+
+            actions_for_segment = index_to_actions.get(segment_index, [])
+            if actions_for_segment:
+                actions_text = " ".join(
+                    [f"Action: {action_text}." for action_text in actions_for_segment]
+                )
+                segment_prompt = (
+                    f"{base_loop_instructions}\n{animate_instructions}\n"
+                    f"This is segment {segment_index + 1} of {config.length}. {actions_text}"
+                )
+            else:
+                segment_prompt = (
+                    f"{base_loop_instructions}\n{animate_instructions}\n"
+                    f"This is segment {segment_index + 1} of {config.length}."
+                )
+
+            operation = client.models.generate_videos(
+                model=self.VEO_MODEL,
+                prompt=segment_prompt,
+                image=base_image,
+                config=types.GenerateVideosConfig(
+                    number_of_videos=1,
+                    # Respect API limit; not user-configurable here
+                    duration_seconds=8,  # VEO model supports this duration
+                    aspect_ratio=self.ASPECT_RATIO,
+                    last_frame=base_image,
+                ),
+            )
+
+            operation = self._wait_for_operation(client, operation)
+
+            videos = getattr(operation, "response", getattr(operation, "result")).generated_videos
+            if not videos:
+                raise RuntimeError("Veo returned no videos.")
+
+            # Append this segment to the manager
+            manager.add_segment(videos[0].video)
+
+        # 3) Save the combined segments and return final path
         final_path = manager.save()
         return final_path
 

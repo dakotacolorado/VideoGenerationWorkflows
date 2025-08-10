@@ -21,20 +21,20 @@ OUTPUT_DIR = os.getenv(
 
 config = VideoConfiguration(
     video_name=VIDEO_NAME,
-    length=3,
+    length=5,
     base_scene_prompt=(
         "A serene forest lake with a clear blue sky and gentle ripples on the water."
     ),
-    animate_scene_prompt="Generate a live frame based on provided photo.",
+    animate_scene_prompt="Generate a slowly changing scene based on provided photo.  Keep the camera position and framing constant.",
     action_prompts=[
-        ActionPrompt(
-            prompt="A small boat drifts on the lake, a single rowboat.", start_index=0
-        ),
         ActionPrompt(
             prompt="A small boat drifts on the lake, a single rowboat.", start_index=1
         ),
         ActionPrompt(
             prompt="A small boat drifts on the lake, a single rowboat.", start_index=2
+        ),
+        ActionPrompt(
+            prompt="A small boat drifts on the lake, a single rowboat.", start_index=4
         ),
     ],
 )
